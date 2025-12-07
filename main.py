@@ -408,6 +408,10 @@ class MemeSender(Star):
         使用追加方式而非替换，以兼容其他插件（如 Favour_Ultra）的提示词注入
         """
         try:
+            # 检查事件对象是否有 llm_config 属性
+            if not hasattr(event, 'llm_config'):
+                return
+            
             # 获取当前的 LLM 配置
             llm_config = event.llm_config
             if llm_config and "prompt" in llm_config:
