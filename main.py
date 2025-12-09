@@ -485,7 +485,7 @@ class MemeSender(Star):
         valid_emoticons = set(self.category_mapping.keys())  # 预加载合法表情集合
         
         # 诊断日志：记录可用表情分类列表
-        self.logger.info(f"[诊断] 可用表情分类数量: {len(valid_emoticons)}, 列表: {sorted(list(valid_emoticons))[:10]}...")
+        self.logger.info(f"[诊断] 可用表情分类数量: {len(valid_emoticons)}, 列表: {sorted(valid_emoticons)[:10]}...")
 
         clean_text = text
 
@@ -674,7 +674,8 @@ class MemeSender(Star):
         response.completion_text = clean_text.strip()
         
         # 诊断日志：记录清理后的文本内容
-        self.logger.info(f"[诊断] 清理后的文本长度: {len(response.completion_text)}, 内容前100字: {response.completion_text[:100]}")
+        text_preview = response.completion_text[:100] if len(response.completion_text) > 100 else response.completion_text
+        self.logger.info(f"[诊断] 清理后的文本长度: {len(response.completion_text)}, 内容前100字: {text_preview}")
 
     def _is_likely_emotion_markup(self, markup, text, position):
         """判断一个标记是否可能是表情而非普通文本的一部分"""
@@ -815,7 +816,8 @@ class MemeSender(Star):
             for idx, comp in enumerate(cleaned_components):
                 comp_type = type(comp).__name__
                 if isinstance(comp, Plain):
-                    self.logger.info(f"[诊断]   组件 {idx}: {comp_type}, 文本长度: {len(comp.text)}, 内容前50字: {comp.text[:50]}")
+                    text_preview = comp.text[:50] if len(comp.text) > 50 else comp.text
+                    self.logger.info(f"[诊断]   组件 {idx}: {comp_type}, 文本长度: {len(comp.text)}, 内容前50字: {text_preview}")
                 else:
                     self.logger.info(f"[诊断]   组件 {idx}: {comp_type}")
 
