@@ -847,7 +847,7 @@ class MemeSender(Star):
                     if emotion_images:
                         cleaned_components = self._merge_components_with_images(cleaned_components, emotion_images)
                         # 记录最终组件摘要
-                        logger.info(f"[meme_manager] 最终组件列表: {len(cleaned_components)} 个组件")
+                        logger.info(f"[meme_manager] 最终组件摘要: {len(cleaned_components)} 个组件")
                     else:
                         logger.info("没有找到表情图片")
 
