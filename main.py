@@ -472,12 +472,20 @@ class MemeSender(Star):
     async def resp(self, event: AstrMessageEvent, response: LLMResponse):
         """处理 LLM 响应，识别表情"""
 
+        # 诊断日志：记录 LLM 响应是否为空
         if not response or not response.completion_text:
+            self.logger.info("[诊断] LLM 响应为空或无文本内容")
             return
 
         text = response.completion_text
+        # 诊断日志：记录原始响应文本长度
+        self.logger.info(f"[诊断] LLM 原始响应文本长度: {len(text)}")
+        
         self.found_emotions = []  # 重置表情列表
         valid_emoticons = set(self.category_mapping.keys())  # 预加载合法表情集合
+        
+        # 诊断日志：记录可用表情分类列表
+        self.logger.info(f"[诊断] 可用表情分类数量: {len(valid_emoticons)}, 列表: {sorted(list(valid_emoticons))[:10]}...")
 
         clean_text = text
 
@@ -502,6 +510,9 @@ class MemeSender(Star):
             clean_text = clean_text.replace(original, "", 1)  # 每次替换第一个匹配项
             if emotion:
                 self.found_emotions.append(emotion)
+        
+        # 诊断日志：记录严格匹配阶段找到的表情
+        self.logger.info(f"[诊断] 严格匹配（&&符号）阶段找到的表情: {self.found_emotions}")
 
         # 第二阶段：替代标记处理（如[emotion]、(emotion)等）
         if self.config.get("enable_alternative_markup", True):
@@ -535,6 +546,10 @@ class MemeSender(Star):
             for original, emotion in bracket_replacements:
                 clean_text = clean_text.replace(original, "", 1)
                 self.found_emotions.append(emotion)
+            
+            # 诊断日志：记录方括号匹配阶段找到的表情
+            bracket_emotions = [e for _, e in bracket_replacements]
+            self.logger.info(f"[诊断] 方括号匹配阶段找到的表情: {bracket_emotions}")
 
             # 处理(emotion)格式
             paren_pattern = r"\(([^()]+)\)"
@@ -563,8 +578,13 @@ class MemeSender(Star):
             for original, emotion in paren_replacements:
                 clean_text = clean_text.replace(original, "", 1)
                 self.found_emotions.append(emotion)
+            
+            # 诊断日志：记录圆括号匹配阶段找到的表情
+            paren_emotions = [e for _, e in paren_replacements]
+            self.logger.info(f"[诊断] 圆括号匹配阶段找到的表情: {paren_emotions}")
 
         # 第三阶段：处理重复表情模式（如angryangryangry）
+        repeated_emotions_before = len(self.found_emotions)
         if self.config.get("enable_repeated_emotion_detection", True):
             high_confidence_emotions = self.config.get("high_confidence_emotions", [])
 
@@ -599,8 +619,13 @@ class MemeSender(Star):
                             original = match.group(0)
                             clean_text = clean_text.replace(original, "", 1)
                             self.found_emotions.append(emotion)
+        
+        # 诊断日志：记录重复检测阶段找到的表情
+        repeated_emotions = self.found_emotions[repeated_emotions_before:]
+        self.logger.info(f"[诊断] 重复检测阶段找到的表情: {repeated_emotions}")
 
         # 第四阶段：智能识别可能的表情（松散模式）
+        loose_emotions_before = len(self.found_emotions)
         if self.config.get("enable_loose_emotion_matching", True):
             # 查找所有可能的表情词
             for emotion in valid_emoticons:
@@ -624,6 +649,10 @@ class MemeSender(Star):
                         clean_text = (
                             clean_text[:position] + clean_text[position + len(word) :]
                         )
+        
+        # 诊断日志：记录松散匹配阶段找到的表情
+        loose_emotions = self.found_emotions[loose_emotions_before:]
+        self.logger.info(f"[诊断] 松散匹配阶段找到的表情: {loose_emotions}")
 
         # 去重并应用数量限制
         seen = set()
@@ -636,10 +665,16 @@ class MemeSender(Star):
                 break
 
         self.found_emotions = filtered_emotions
+        
+        # 诊断日志：记录最终去重后的表情列表
+        self.logger.info(f"[诊断] 去重后的最终表情列表: {self.found_emotions}")
 
         # 防御性清理残留符号
         clean_text = re.sub(r"&&+", "", clean_text)  # 清除未成对的&&符号
         response.completion_text = clean_text.strip()
+        
+        # 诊断日志：记录清理后的文本内容
+        self.logger.info(f"[诊断] 清理后的文本长度: {len(response.completion_text)}, 内容前100字: {response.completion_text[:100]}")
 
     def _is_likely_emotion_markup(self, markup, text, position):
         """判断一个标记是否可能是表情而非普通文本的一部分"""
@@ -729,6 +764,21 @@ class MemeSender(Star):
         try:
             # 第一步：获取并清理原始消息链中的文本
             original_chain = result.chain
+            
+            # 诊断日志：记录原始消息链的类型和长度
+            chain_type = type(original_chain).__name__
+            if isinstance(original_chain, str):
+                chain_length = len(original_chain)
+                self.logger.info(f"[诊断] 原始消息链类型: {chain_type}, 字符串长度: {chain_length}")
+            elif isinstance(original_chain, MessageChain):
+                chain_length = len(original_chain.chain) if hasattr(original_chain, 'chain') else 0
+                self.logger.info(f"[诊断] 原始消息链类型: {chain_type}, 组件数量: {chain_length}")
+            elif isinstance(original_chain, list):
+                chain_length = len(original_chain)
+                self.logger.info(f"[诊断] 原始消息链类型: {chain_type}, 列表长度: {chain_length}")
+            else:
+                self.logger.info(f"[诊断] 原始消息链类型: {chain_type}")
+            
             cleaned_components = []
 
             if original_chain:
@@ -759,11 +809,27 @@ class MemeSender(Star):
                                 cleaned_components.append(Plain(cleaned.strip()))
                         else:
                             cleaned_components.append(component)
+            
+            # 诊断日志：记录清理前后的组件数量和具体信息
+            self.logger.info(f"[诊断] 清理后的组件数量: {len(cleaned_components)}")
+            for idx, comp in enumerate(cleaned_components):
+                comp_type = type(comp).__name__
+                if isinstance(comp, Plain):
+                    self.logger.info(f"[诊断]   组件 {idx}: {comp_type}, 文本长度: {len(comp.text)}, 内容前50字: {comp.text[:50]}")
+                else:
+                    self.logger.info(f"[诊断]   组件 {idx}: {comp_type}")
 
             # 第二步：添加表情图片（如果有找到的表情）
+            # 诊断日志：记录 found_emotions 列表内容
+            self.logger.info(f"[诊断] found_emotions 列表: {self.found_emotions}")
+            
             if self.found_emotions:
                 # 检查概率（注意：概率判断是"小于等于"才发送）
-                if random.randint(1, 100) <= self.emotions_probability:
+                random_num = random.randint(1, 100)
+                # 诊断日志：记录概率检查的随机数和阈值
+                self.logger.info(f"[诊断] 概率检查: 随机数={random_num}, 阈值={self.emotions_probability}, 是否发送={random_num <= self.emotions_probability}")
+                
+                if random_num <= self.emotions_probability:
                     # 创建表情图片列表
                     emotion_images = []
                     for emotion in self.found_emotions:
@@ -771,6 +837,9 @@ class MemeSender(Star):
                             continue
 
                         emotion_path = os.path.join(MEMES_DIR, emotion)
+                        # 诊断日志：记录表情目录是否存在
+                        self.logger.info(f"[诊断] 检查表情目录: {emotion}, 路径: {emotion_path}, 存在: {os.path.exists(emotion_path)}")
+                        
                         if not os.path.exists(emotion_path):
                             continue
 
@@ -779,6 +848,10 @@ class MemeSender(Star):
                             for f in os.listdir(emotion_path)
                             if f.endswith((".jpg", ".png", ".gif"))
                         ]
+                        
+                        # 诊断日志：记录每个表情目录中找到的图片数量
+                        self.logger.info(f"[诊断] 表情 {emotion} 目录中找到的图片数量: {len(memes)}")
+                        
                         if not memes:
                             continue
 
@@ -794,7 +867,10 @@ class MemeSender(Star):
                     if emotion_images:
                         self.logger.info(f"找到 {len(emotion_images)} 个表情图片，开始与文本配对")
                         self.logger.info(f"配对前的组件数量: {len(cleaned_components)}")
+                        
+                        # 诊断日志：记录最终合并后的组件列表
                         cleaned_components = self._merge_components_with_images(cleaned_components, emotion_images)
+                        
                         self.logger.info(f"配对后的组件数量: {len(cleaned_components)}")
                         # 打印配对后的组件类型
                         for i, comp in enumerate(cleaned_components):
@@ -813,6 +889,8 @@ class MemeSender(Star):
             if cleaned_components:
                 # 直接使用组件列表，不要包装在 MessageChain 中
                 result.chain = cleaned_components
+                # 诊断日志：记录 result.chain 的最终状态
+                self.logger.info(f"[诊断] result.chain 最终状态: 类型={type(result.chain).__name__}, 长度={len(result.chain) if isinstance(result.chain, list) else 'N/A'}")
             elif original_chain:
                 # 如果原本有内容但清理后为空，也要更新（避免发送带标签的空消息）
                 # 进行最后的防御性清理
@@ -1174,6 +1252,9 @@ class MemeSender(Star):
         Returns:
             合并后的消息组件列表，图片会合理地分布在文本中
         """
+        # 诊断日志：记录输入的组件数和图片数
+        self.logger.info(f"[诊断] _merge_components_with_images 输入: 组件数={len(components) if components else 0}, 图片数={len(images) if images else 0}")
+        
         if not images:
             return components
 
@@ -1183,6 +1264,9 @@ class MemeSender(Star):
 
         # 找到所有 Plain 组件的索引
         plain_indices = [i for i, comp in enumerate(components) if isinstance(comp, Plain)]
+        
+        # 诊断日志：记录 Plain 组件的索引位置
+        self.logger.info(f"[诊断] Plain 组件索引位置: {plain_indices}, Plain 组件数量: {len(plain_indices)}")
 
         if not plain_indices:
             # 没有 Plain 组件，直接添加图片到末尾
@@ -1205,6 +1289,9 @@ class MemeSender(Star):
                 images_for_this_text = len(images) - image_index
             else:
                 images_for_this_text = min(images_per_text, len(images) - image_index)
+            
+            # 诊断日志：记录每个文本组件分配的图片数量
+            self.logger.info(f"[诊断] Plain 组件 {idx} (索引 {plain_idx}) 分配图片数量: {images_for_this_text}")
 
             # 在这个文本组件后插入图片
             # 注意：plain_idx 是在原始 components 中的位置，但由于我们已经插入了一些图片，
@@ -1217,5 +1304,8 @@ class MemeSender(Star):
                     image_index += 1
                     insert_pos += 1
                     images_inserted_so_far += 1
+        
+        # 诊断日志：记录合并后的组件总数
+        self.logger.info(f"[诊断] 合并后的组件总数: {len(merged_components)}")
 
         return merged_components
