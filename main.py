@@ -663,7 +663,6 @@ class MemeSender(Star):
         # 防御性清理残留符号
         clean_text = re.sub(r"&&+", "", clean_text)  # 清除未成对的&&符号
         response.completion_text = clean_text.strip()
-        logger.info(f"[meme_manager] 清理后的最终文本内容长度: {len(response.completion_text)}")
 
     def _is_likely_emotion_markup(self, markup, text, position):
         """判断一个标记是否可能是表情而非普通文本的一部分"""
@@ -769,12 +768,6 @@ class MemeSender(Star):
                 else:
                     chain_length = 0
                 logger.info(f"[meme_manager] 原始消息链类型: {chain_type}, 长度: {chain_length}")
-                
-                # 记录清理前的组件详情
-                if isinstance(original_chain, MessageChain):
-                    logger.info(f"[meme_manager] 清理前的组件详情: {[type(c).__name__ for c in original_chain.chain]}")
-                elif isinstance(original_chain, list):
-                    logger.info(f"[meme_manager] 清理前的组件详情: {[type(c).__name__ for c in original_chain]}")
 
             if original_chain:
                 # 处理不同类型的消息链
@@ -805,8 +798,8 @@ class MemeSender(Star):
                         else:
                             cleaned_components.append(component)
             
-            # 记录清理后的组件详情
-            logger.info(f"[meme_manager] 清理后的组件数量: {len(cleaned_components)}, 详情: {[type(c).__name__ for c in cleaned_components]}")
+            # 记录清理后的组件摘要
+            logger.info(f"[meme_manager] 清理后的组件数量: {len(cleaned_components)}")
 
             # 第二步：添加表情图片（如果有找到的表情）
             logger.info(f"[meme_manager] found_emotions 列表: {self.found_emotions}")
@@ -852,18 +845,9 @@ class MemeSender(Star):
 
                     # 将图片与文本组件智能配对，支持分段回复
                     if emotion_images:
-                        logger.info(f"找到 {len(emotion_images)} 个表情图片，开始与文本配对")
-                        logger.info(f"配对前的组件数量: {len(cleaned_components)}")
                         cleaned_components = self._merge_components_with_images(cleaned_components, emotion_images)
-                        logger.info(f"配对后的组件数量: {len(cleaned_components)}")
-                        # 打印配对后的组件类型
-                        logger.info(f"[meme_manager] 最终组件列表详情: {[type(c).__name__ for c in cleaned_components]}")
-                        for i, comp in enumerate(cleaned_components):
-                            comp_type = type(comp).__name__
-                            if isinstance(comp, Plain):
-                                logger.info(f"组件 {i}: {comp_type} - {comp.text[:20]}...")
-                            else:
-                                logger.info(f"组件 {i}: {comp_type}")
+                        # 记录最终组件摘要
+                        logger.info(f"[meme_manager] 最终组件列表: {len(cleaned_components)} 个组件")
                     else:
                         logger.info("没有找到表情图片")
 
@@ -874,7 +858,6 @@ class MemeSender(Star):
             if cleaned_components:
                 # 直接使用组件列表，不要包装在 MessageChain 中
                 result.chain = cleaned_components
-                logger.info(f"[meme_manager] result.chain 最终状态: {[type(c).__name__ for c in result.chain]}")
             elif original_chain:
                 # 如果原本有内容但清理后为空，也要更新（避免发送带标签的空消息）
                 # 进行最后的防御性清理
@@ -1272,8 +1255,6 @@ class MemeSender(Star):
                 images_for_this_text = len(images) - image_index
             else:
                 images_for_this_text = min(images_per_text, len(images) - image_index)
-            
-            logger.info(f"[meme_manager] Plain 组件 {idx} (索引={plain_idx}) 分配的图片数量: {images_for_this_text}")
 
             # 在这个文本组件后插入图片
             # 注意：plain_idx 是在原始 components 中的位置，但由于我们已经插入了一些图片，
@@ -1287,6 +1268,6 @@ class MemeSender(Star):
                     insert_pos += 1
                     images_inserted_so_far += 1
         
-        logger.info(f"[meme_manager] 合并前组件总数: {len(components)}, 合并后组件总数: {len(merged_components)}")
+        logger.info(f"[meme_manager] 合并后组件总数: {len(merged_components)}")
 
         return merged_components
